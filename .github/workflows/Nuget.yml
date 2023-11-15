@@ -1,0 +1,54 @@
+name: .NET
+
+on:
+  push:
+    branches:
+      - '*'
+  pull_request:
+    branches:
+      - '*'
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        dotnet: [ '6.0.x', '5.0.x', '3.1.x' ]
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: ${{ matrix.dotnet }}
+
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Build
+      run: dotnet build --no-restore
+
+    - name: Test
+      run: dotnet test --no-build --verbosity normal
+
+    # Add additional steps for code quality, linting, etc.
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: '6.0.x'  # Use a specific version for publishing
+
+    - name: Publish to NuGet
+      run: |
+        echo "//nuget.org/api/v2/package:$(Build.ArtifactStagingDirectory)/*.nupkg" >> nuget.config
+        dotnet nuget push -s https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }} --configfile nuget.config $(Build.ArtifactStagingDirectory)/*.nupkg
