@@ -15,7 +15,7 @@ jobs:
 
     strategy:
       matrix:
-        dotnet: [ '6.0.x', '5.0.x', '3.1.x' ]
+        dotnet: [ '2.0.x' ]
 
     steps:
     - uses: actions/checkout@v3
@@ -46,7 +46,7 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v3
       with:
-        dotnet-version: '6.0.x'  # Use a specific version for publishing
+        dotnet-version: '2.0.x'  # Use a specific version for publishing
 
     - name: Publish to NuGet
       run: |
