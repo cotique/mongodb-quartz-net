@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using MongoDB.Bson;
 using MongoDB.Driver;
 using Quartz.Impl.Matchers;
 using Quartz.Spi.MongoDbJobStore.Extensions;
@@ -62,18 +63,26 @@ namespace Quartz.Spi.MongoDbJobStore.Repositories
 
         public async Task<List<TriggerKey>> GetTriggerKeys(GroupMatcher<TriggerKey> matcher)
         {
-            return await Collection.Find(FilterBuilder.And(
-                FilterBuilder.Eq(trigger => trigger.Id.InstanceName, InstanceName),
-                FilterBuilder.Regex(trigger => trigger.Id.Group, matcher.ToBsonRegularExpression())))
-                .Project(trigger => trigger.Id.GetTriggerKey())
-                .ToListAsync().ConfigureAwait(false);
+            var filter = Builders<Trigger>.Filter.And(
+                Builders<Trigger>.Filter.Eq(trigger => trigger.Id.InstanceName, InstanceName),
+                Builders<Trigger>.Filter.Regex(trigger => trigger.Id.Group, matcher.ToBsonRegularExpression())
+            );
+
+            var projection = Builders<Trigger>.Projection.Expression(trigger => new TriggerKey(trigger.Id.Name, trigger.Id.Group));
+
+            return await Collection.Find(filter).Project(projection).ToListAsync().ConfigureAwait(false);
         }
 
         public async Task<List<TriggerKey>> GetTriggerKeys(Models.TriggerState state)
         {
-            return await Collection.Find(trigger => trigger.Id.InstanceName == InstanceName && trigger.State == state)
-                .Project(trigger => trigger.Id.GetTriggerKey())
-                .ToListAsync().ConfigureAwait(false);
+            var filter = Builders<Trigger>.Filter.And(
+                Builders<Trigger>.Filter.Eq(trigger => trigger.Id.InstanceName, InstanceName),
+                Builders<Trigger>.Filter.Eq(trigger => trigger.State, state)
+            );
+
+            var projection = Builders<Trigger>.Projection.Expression(trigger => new TriggerKey(trigger.Id.Name, trigger.Id.Group));
+
+            return await Collection.Find(filter).Project(projection).ToListAsync().ConfigureAwait(false);
         }
 
         public async Task<List<string>> GetTriggerGroupNames()
@@ -102,19 +111,27 @@ namespace Quartz.Spi.MongoDbJobStore.Repositories
             var noLaterThanDateTime = noLaterThan.UtcDateTime;
             var noEarlierThanDateTime = noEarlierThan.UtcDateTime;
 
-            return await Collection.Find(trigger => trigger.Id.InstanceName == InstanceName &&
-                                              trigger.State == Models.TriggerState.Waiting &&
-                                              trigger.NextFireTime <= noLaterThanDateTime &&
-                                              (trigger.MisfireInstruction == -1 ||
-                                               (trigger.MisfireInstruction != -1 &&
-                                                trigger.NextFireTime >= noEarlierThanDateTime)))
-                .Sort(SortBuilder.Combine(
-                    SortBuilder.Ascending(trigger => trigger.NextFireTime),
-                    SortBuilder.Descending(trigger => trigger.Priority)
-                    ))
-                .Limit(maxCount)
-                .Project(trigger => trigger.Id.GetTriggerKey())
-                .ToListAsync().ConfigureAwait(false);
+            var filter = Builders<Trigger>.Filter.And(
+                Builders<Trigger>.Filter.Eq(trigger => trigger.Id.InstanceName, InstanceName),
+                Builders<Trigger>.Filter.Eq(trigger => trigger.State, Models.TriggerState.Waiting),
+                Builders<Trigger>.Filter.Lte(trigger => trigger.NextFireTime, noLaterThanDateTime),
+                Builders<Trigger>.Filter.Or(
+                    Builders<Trigger>.Filter.Eq(trigger => trigger.MisfireInstruction, -1),
+                    Builders<Trigger>.Filter.And(
+                        Builders<Trigger>.Filter.Ne(trigger => trigger.MisfireInstruction, -1),
+                        Builders<Trigger>.Filter.Gte(trigger => trigger.NextFireTime, noEarlierThanDateTime)
+                    )
+                )
+            );
+
+            var sort = Builders<Trigger>.Sort.Combine(
+                Builders<Trigger>.Sort.Ascending(trigger => trigger.NextFireTime),
+                Builders<Trigger>.Sort.Descending(trigger => trigger.Priority)
+            );
+
+            var projection = Builders<Trigger>.Projection.Expression(trigger => new TriggerKey(trigger.Id.Name, trigger.Id.Group));
+
+            return await Collection.Find(filter).Sort(sort).Limit(maxCount).Project(projection).ToListAsync().ConfigureAwait(false);
         }
 
         public async Task<long> GetCount()
@@ -231,16 +248,21 @@ namespace Quartz.Spi.MongoDbJobStore.Repositories
         /// <returns></returns>
         public bool HasMisfiredTriggers(DateTime nextFireTime, int maxResults, out List<TriggerKey> results)
         {
-            var cursor = Collection.Find(
-                trigger => trigger.Id.InstanceName == InstanceName &&
-                           trigger.MisfireInstruction != MisfireInstruction.IgnoreMisfirePolicy &&
-                           trigger.NextFireTime < nextFireTime &&
-                           trigger.State == Models.TriggerState.Waiting)
-                .Project(trigger => trigger.Id.GetTriggerKey())
-                .Sort(SortBuilder.Combine(
-                    SortBuilder.Ascending(trigger => trigger.NextFireTime),
-                    SortBuilder.Descending(trigger => trigger.Priority)
-                    )).ToCursor();
+            var filter = Builders<Trigger>.Filter.And(
+    Builders<Trigger>.Filter.Eq(t => t.Id.InstanceName, InstanceName),
+    Builders<Trigger>.Filter.Ne(t => t.MisfireInstruction, MisfireInstruction.IgnoreMisfirePolicy),
+    Builders<Trigger>.Filter.Lt(t => t.NextFireTime, nextFireTime),
+    Builders<Trigger>.Filter.Eq(t => t.State, Models.TriggerState.Waiting)
+);
+
+            var sort = Builders<Trigger>.Sort.Combine(
+                Builders<Trigger>.Sort.Ascending(t => t.NextFireTime),
+                Builders<Trigger>.Sort.Descending(t => t.Priority)
+            );
+
+            var projection = Builders<Trigger>.Projection.Expression(t => new TriggerKey(t.Id.Name, t.Id.Group));
+
+            var cursor = Collection.Find(filter).Sort(sort).Project(projection).ToCursor();
 
             results = new List<TriggerKey>();
 
