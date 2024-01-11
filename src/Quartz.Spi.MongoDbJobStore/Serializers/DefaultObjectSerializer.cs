@@ -11,6 +11,9 @@ namespace Quartz.Simpl
     /// <author>Marko Lahma</author>
     public class DefaultObjectSerializer : IObjectSerializer
     {
+        /// <summary>
+        /// Initializes the serializer.
+        /// </summary>
         public void Initialize()
         {
         }
