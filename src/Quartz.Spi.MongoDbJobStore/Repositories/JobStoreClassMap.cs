@@ -62,7 +62,7 @@ namespace Quartz.Spi.MongoDbJobStore.Repositories
                 map.AutoMap();
                 var serializer =
                     new EnumerableInterfaceImplementerSerializer
-                        <System.Collections.Generic.HashSet<DayOfWeek>, DayOfWeek>(
+                        <HashSet<DayOfWeek>, DayOfWeek>(
                         new EnumSerializer<DayOfWeek>(BsonType.String));
                 map.MapProperty(trigger => trigger.DaysOfWeek).SetSerializer(serializer);
             });
