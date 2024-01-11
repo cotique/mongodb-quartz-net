@@ -1,17 +1,19 @@
-using System.IO;
-using System.Runtime.Serialization.Formatters.Binary;
-
+using System.Text;
+using System.Text.Json;
 using Quartz.Spi;
 
 namespace Quartz.Simpl
 {
     /// <summary>
-    /// Default object serialization strategy that uses <see cref="BinaryFormatter" /> 
+    /// Default object serialization strategy that uses <see cref="JsonSerializer" /> 
     /// under the hood.
     /// </summary>
     /// <author>Marko Lahma</author>
     public class DefaultObjectSerializer : IObjectSerializer
     {
+        /// <summary>
+        /// Initializes the serializer.
+        /// </summary>
         public void Initialize()
         {
         }
@@ -23,12 +25,8 @@ namespace Quartz.Simpl
         /// <param name="obj">Object to serialize.</param>
         public byte[] Serialize<T>(T obj) where T : class
         {
-            using (MemoryStream ms = new MemoryStream())
-            {
-                BinaryFormatter bf = new BinaryFormatter();
-                bf.Serialize(ms, obj);
-                return ms.ToArray();
-            }
+            string jsonString = JsonSerializer.Serialize(obj);
+            return Encoding.UTF8.GetBytes(jsonString);
         }
 
         /// <summary>
@@ -37,11 +35,9 @@ namespace Quartz.Simpl
         /// <param name="data">Data to deserialize object from.</param>
         public T DeSerialize<T>(byte[] data) where T : class
         {
-            using (MemoryStream ms = new MemoryStream(data))
-            {
-                BinaryFormatter bf = new BinaryFormatter();
-                return (T)bf.Deserialize(ms);
-            }
+            string jsonString = Encoding.UTF8.GetString(data);
+
+            return JsonSerializer.Deserialize<T>(jsonString);
         }
     }
 }
