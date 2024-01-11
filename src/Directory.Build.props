@@ -23,10 +23,10 @@
     <Authors>Gabriel Lucaci</Authors>
     <Company>Gabriel Lucaci</Company>
     <Copyright>Copyright © 2021 Gabriel Lucaci</Copyright>
-    <PackageLicenseUrl>https://github.com/glucaci/mongodb-quartz-net/blob/master/LICENSE</PackageLicenseUrl>
-    <PackageProjectUrl>https://github.com/glucaci/mongodb-quartz-net</PackageProjectUrl>
-    <PackageReleaseNotes>Release notes: https://github.com/glucaci/mongodb-quartz-net/releases/$(Version)</PackageReleaseNotes>
-    <RepositoryUrl>https://github.com/glucaci/mongodb-quartz-net.git</RepositoryUrl>
+    <PackageLicenseUrl>https://github.com/cotique/mongodb-quartz-net/blob/master/LICENSE</PackageLicenseUrl>
+    <PackageProjectUrl>https://github.com/cotique/mongodb-quartz-net</PackageProjectUrl>
+    <PackageReleaseNotes>Release notes: https://github.com/cotique/mongodb-quartz-net/releases/$(Version)</PackageReleaseNotes>
+    <RepositoryUrl>https://github.com/cotique/mongodb-quartz-net.git</RepositoryUrl>
     <PackageTags>Quartz.NET Store JobStore MongoDB</PackageTags>
     <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
     <RepositoryType>GitHub</RepositoryType>
