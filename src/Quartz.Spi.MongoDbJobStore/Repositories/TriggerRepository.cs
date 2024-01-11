@@ -249,16 +249,14 @@ namespace Quartz.Spi.MongoDbJobStore.Repositories
         public bool HasMisfiredTriggers(DateTime nextFireTime, int maxResults, out List<TriggerKey> results)
         {
             var filter = Builders<Trigger>.Filter.And(
-    Builders<Trigger>.Filter.Eq(t => t.Id.InstanceName, InstanceName),
-    Builders<Trigger>.Filter.Ne(t => t.MisfireInstruction, MisfireInstruction.IgnoreMisfirePolicy),
-    Builders<Trigger>.Filter.Lt(t => t.NextFireTime, nextFireTime),
-    Builders<Trigger>.Filter.Eq(t => t.State, Models.TriggerState.Waiting)
-);
+                Builders<Trigger>.Filter.Eq(t => t.Id.InstanceName, InstanceName),
+                Builders<Trigger>.Filter.Ne(t => t.MisfireInstruction, MisfireInstruction.IgnoreMisfirePolicy),
+                Builders<Trigger>.Filter.Lt(t => t.NextFireTime, nextFireTime),
+                Builders<Trigger>.Filter.Eq(t => t.State, Models.TriggerState.Waiting));
 
             var sort = Builders<Trigger>.Sort.Combine(
                 Builders<Trigger>.Sort.Ascending(t => t.NextFireTime),
-                Builders<Trigger>.Sort.Descending(t => t.Priority)
-            );
+                Builders<Trigger>.Sort.Descending(t => t.Priority));
 
             var projection = Builders<Trigger>.Projection.Expression(t => new TriggerKey(t.Id.Name, t.Id.Group));
 
