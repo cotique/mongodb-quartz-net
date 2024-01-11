@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using MongoDB.Bson;
 using MongoDB.Driver;
 using Quartz.Impl.Matchers;
 using Quartz.Spi.MongoDbJobStore.Extensions;
@@ -24,12 +25,14 @@ namespace Quartz.Spi.MongoDbJobStore.Repositories
 
         public async Task<List<JobKey>> GetJobsKeys(GroupMatcher<JobKey> matcher)
         {
-            return
-                await Collection.Find(FilterBuilder.And(
-                    FilterBuilder.Eq(detail => detail.Id.InstanceName, InstanceName),
-                    FilterBuilder.Regex(detail => detail.Id.Group, matcher.ToBsonRegularExpression())))
-                    .Project(detail => detail.Id.GetJobKey())
-                    .ToListAsync().ConfigureAwait(false);
+            var filter = Builders<JobDetail>.Filter.And(
+                Builders<JobDetail>.Filter.Eq(detail => detail.Id.InstanceName, InstanceName),
+                Builders<JobDetail>.Filter.Regex(detail => detail.Id.Group, matcher.ToBsonRegularExpression())
+            );
+
+            var projection = Builders<JobDetail>.Projection.Expression(detail => new JobKey(detail.Id.Name, detail.Id.Group));
+
+            return await Collection.Find(filter).Project(projection).ToListAsync().ConfigureAwait(false);
         }
 
         public async Task<IEnumerable<string>> GetJobGroupNames()
