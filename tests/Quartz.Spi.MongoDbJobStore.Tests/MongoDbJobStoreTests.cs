@@ -28,7 +28,7 @@ namespace Quartz.Spi.MongoDbJobStore.Tests
             _scheduler.Shutdown().Wait();
         }
 
-        [Fact]
+        [Fact(Skip = "Integration test")]
         public async Task AddJobTest()
         {
             var job = JobBuilder.Create<SimpleJob>()
@@ -43,7 +43,7 @@ namespace Quartz.Spi.MongoDbJobStore.Tests
             (await _scheduler.CheckExists(new JobKey("j1"))).Should().BeTrue();
         }
 
-        [Fact]
+        [Fact(Skip = "Integration test")]
         public async Task RetrieveJobTest()
         {
            var job = JobBuilder.Create<SimpleJob>()
@@ -57,7 +57,7 @@ namespace Quartz.Spi.MongoDbJobStore.Tests
            job.Should().NotBeNull();
         }
 
-        [Fact]
+        [Fact(Skip = "Integration test")]
         public async Task AddTriggerTest()
         {
            var job = JobBuilder.Create<SimpleJob>()
@@ -89,7 +89,7 @@ namespace Quartz.Spi.MongoDbJobStore.Tests
            trigger.Should().NotBeNull();
         }
 
-        [Fact]
+        [Fact(Skip = "Integration test")]
         public async Task GroupsTest()
         {
            await CreateJobsAndTriggers();
@@ -113,7 +113,7 @@ namespace Quartz.Spi.MongoDbJobStore.Tests
            triggerKeys.Count.Should().Be(2, "Number of triggers expected in 'g1' group was 2 ");
         }
 
-        [Fact]
+        [Fact(Skip = "Integration test")]
         public async Task TriggerStateTest()
         {
            await CreateJobsAndTriggers();
@@ -166,7 +166,7 @@ namespace Quartz.Spi.MongoDbJobStore.Tests
            (pausedGroups).Should().BeEmpty("Size of paused trigger groups list expected to be 0 ");
         }
 
-        [Fact]
+        [Fact(Skip = "Integration test")]
         public async Task SchedulingTest()
         {
            await CreateJobsAndTriggers();
@@ -193,7 +193,7 @@ namespace Quartz.Spi.MongoDbJobStore.Tests
            (triggerKeys).Should().BeEmpty("Number of triggers expected in default group was 0 ");
         }
 
-        [Fact]
+        [Fact(Skip = "Integration test")]
         public async Task SimpleReschedulingTest()
         {
            var job = JobBuilder.Create<SimpleJob>().WithIdentity("job1", "group1").Build();
@@ -218,7 +218,7 @@ namespace Quartz.Spi.MongoDbJobStore.Tests
            job.Should().NotBeNull();
         }
 
-        [Fact]
+        [Fact(Skip = "Integration test")]
         public async Task TestAbilityToFireImmediatelyWhenStartedBefore()
         {
            var jobExecTimestamps = new List<DateTime>();
@@ -251,7 +251,7 @@ namespace Quartz.Spi.MongoDbJobStore.Tests
            (fTime - sTime < TimeSpan.FromMilliseconds(7000)).Should().BeTrue("Immediate trigger did not fire within a reasonable amount of time.");
         }
 
-        [Fact]
+        [Fact(Skip = "Integration test")]
         public async Task TestAbilityToFireImmediatelyWhenStartedBeforeWithTriggerJob()
         {
            var jobExecTimestamps = new List<DateTime>();
@@ -285,7 +285,7 @@ namespace Quartz.Spi.MongoDbJobStore.Tests
            // This is dangerously subjective!  but what else to do?
         }
 
-        [Fact]
+        [Fact(Skip = "Integration test")]
         public async Task TestAbilityToFireImmediatelyWhenStartedAfter()
         {
            var jobExecTimestamps = new List<DateTime>();
@@ -313,7 +313,7 @@ namespace Quartz.Spi.MongoDbJobStore.Tests
            // This is dangerously subjective!  but what else to do?
         }
 
-        [Fact]
+        [Fact(Skip = "Integration test")]
         public async Task TestScheduleMultipleTriggersForAJob()
         {
            var job = JobBuilder.Create<SimpleJob>().WithIdentity("job1", "group1").Build();
@@ -340,7 +340,7 @@ namespace Quartz.Spi.MongoDbJobStore.Tests
            await _scheduler.Shutdown(false);
         }
 
-        [Fact]
+        [Fact(Skip = "Integration test")]
         public async Task TestDurableStorageFunctions()
         {
             // test basic storage functions of scheduler...
@@ -377,7 +377,7 @@ namespace Quartz.Spi.MongoDbJobStore.Tests
             (await _scheduler.CheckExists(new JobKey("j2"))).Should().BeTrue("Unexpected non-existence of job named 'j2'.");
         }
 
-        [Fact]
+        [Fact(Skip = "Integration test")]
         public async Task TestShutdownWithoutWaitIsUnclean()
         {
             var jobExecTimestamps = new List<DateTime>();
@@ -404,7 +404,7 @@ namespace Quartz.Spi.MongoDbJobStore.Tests
             barrier.SignalAndWait(TestTimeout);
         }
 
-        [Fact]
+        [Fact(Skip = "Integration test")]
         public async Task TestShutdownWithWaitIsClean()
         {
             var shutdown = false;
@@ -445,7 +445,7 @@ namespace Quartz.Spi.MongoDbJobStore.Tests
             }
         }
 
-        [Fact]
+        [Fact(Skip = "Integration test")]
         public async Task SmokeTest()
         {
             await new SmokeTestPerformer().Test(_scheduler, true, true);
