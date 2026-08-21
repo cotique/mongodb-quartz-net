@@ -303,7 +303,7 @@ namespace Quartz.Spi.MongoDbJobStore
             }
         }
 
-        public async Task<IJobDetail> RetrieveJob(JobKey jobKey, CancellationToken token = default(CancellationToken))
+        public async Task<IJobDetail?> RetrieveJob(JobKey jobKey, CancellationToken token = default(CancellationToken))
         {
             var result = await _jobDetailRepository.GetJob(jobKey).ConfigureAwait(false);
             return result?.GetJobDetail();
@@ -368,7 +368,7 @@ namespace Quartz.Spi.MongoDbJobStore
             }
         }
 
-        public async Task<IOperableTrigger> RetrieveTrigger(TriggerKey triggerKey,
+        public async Task<IOperableTrigger?> RetrieveTrigger(TriggerKey triggerKey,
             CancellationToken token = default(CancellationToken))
         {
             var result = await _triggerRepository.GetTrigger(triggerKey).ConfigureAwait(false);
@@ -441,7 +441,7 @@ namespace Quartz.Spi.MongoDbJobStore
             }
         }
 
-        public async Task<ICalendar> RetrieveCalendar(string calName,
+        public async Task<ICalendar?> RetrieveCalendar(string calName,
             CancellationToken token = default(CancellationToken))
         {
             var result = await _calendarRepository.GetCalendar(calName).ConfigureAwait(false);
