@@ -16,7 +16,7 @@ namespace Quartz.Spi.MongoDbJobStore.Repositories
         public async Task AddScheduler(Scheduler scheduler)
         {
             await Collection.ReplaceOneAsync(sch => sch.Id == scheduler.Id,
-                scheduler, new UpdateOptions()
+                scheduler, new ReplaceOptions
                 {
                     IsUpsert = true
                 }).ConfigureAwait(false);

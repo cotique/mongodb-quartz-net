@@ -1,13 +1,14 @@
 ﻿using System;
 using System.Threading;
-using Common.Logging;
+using Microsoft.Extensions.Logging;
 using Quartz.Impl.AdoJobStore;
+using Quartz.Spi.MongoDbJobStore.Util;
 
 namespace Quartz.Spi.MongoDbJobStore
 {
     internal class MisfireHandler : QuartzThread
     {
-        private static readonly ILog Log = LogManager.GetLogger<MisfireHandler>();
+        private static ILogger Log => JobStoreLogging.For<MisfireHandler>();
 
         private readonly MongoDbJobStore _jobStore;
         private bool _shutdown;
@@ -71,7 +72,7 @@ namespace Quartz.Spi.MongoDbJobStore
         {
             try
             {
-                Log.Debug("Scanning for misfires...");
+                Log.LogDebug("Scanning for misfires...");
                 var result = _jobStore.DoRecoverMisfires().Result;
                 _numFails = 0;
                 return result;
@@ -80,7 +81,7 @@ namespace Quartz.Spi.MongoDbJobStore
             {
                 if (_numFails%_jobStore.RetryableActionErrorLogThreshold == 0)
                 {
-                    Log.Error($"Error handling misfires: {ex.Message}", ex);
+                    Log.LogError(ex, "Error handling misfires");
                 }
                 _numFails++;
             }

@@ -1,12 +1,12 @@
 ﻿using MongoDB.Bson.Serialization.Attributes;
-using Quartz.Simpl;
+using Quartz.Spi.MongoDbJobStore.Serializers;
 using Quartz.Spi.MongoDbJobStore.Models.Id;
 
 namespace Quartz.Spi.MongoDbJobStore.Models
 {
     internal class Calendar
     {
-        private static readonly IObjectSerializer ObjectSerializer = new DefaultObjectSerializer();
+        private static readonly IObjectSerializer ObjectSerializer = JobStoreObjectSerializer.Instance;
 
         public Calendar()
         {
