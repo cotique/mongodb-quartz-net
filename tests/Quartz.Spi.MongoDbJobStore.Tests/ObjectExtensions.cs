@@ -1,5 +1,5 @@
-﻿using System.IO;
-using System.Runtime.Serialization.Formatters.Binary;
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization;
 
 namespace Quartz.Util
 {
@@ -9,7 +9,8 @@ namespace Quartz.Util
     public static class ObjectExtensions
     {
         /// <summary>
-        /// Creates a deep copy of object by serializing to memory stream.
+        /// Creates a deep copy of object by round-tripping it through BSON, the
+        /// same representation the job store persists documents in.
         /// </summary>
         /// <param name="obj"></param>
         public static T DeepClone<T>(this T obj) where T : class
@@ -19,13 +20,7 @@ namespace Quartz.Util
                 return null;
             }
 
-            BinaryFormatter bf = new BinaryFormatter();
-            using (MemoryStream ms = new MemoryStream())
-            {
-                bf.Serialize(ms, obj);
-                ms.Seek(0, SeekOrigin.Begin);
-                return (T)bf.Deserialize(ms);
-            }
+            return BsonSerializer.Deserialize<T>(obj.ToBson());
         }
     }
 }
