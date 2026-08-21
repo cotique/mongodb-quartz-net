@@ -21,5 +21,5 @@ return scheduler.GetScheduler();
 ## Nuget
 
 ```
-Install-Package Quartz.Spi.MongoDbJobStore
+Install-Package cotique.Quartz.Spi.MongoDbJobStore
 ```
