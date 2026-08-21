@@ -1139,8 +1139,11 @@ namespace Quartz.Spi.MongoDbJobStore
                     }
                 }
 
+                // The parentheses matter and mirror Quartz's own JobStoreSupport.StoreTrigger:
+                // without them && binds tighter, so an Acquired trigger would be paused even
+                // when nothing is paused at all.
                 if (shouldBePaused &&
-                    state == Models.TriggerState.Waiting || state == Models.TriggerState.Acquired)
+                    (state == Models.TriggerState.Waiting || state == Models.TriggerState.Acquired))
                 {
                     state = Models.TriggerState.Paused;
                 }
