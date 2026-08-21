@@ -415,7 +415,7 @@ namespace Quartz.Tests.Integration.Impl
                 count = 0;
             }
             count++;
-            data.Put(Count, count);
+            data[Count] = count;
             return Task.FromResult(0);
         }
     }
