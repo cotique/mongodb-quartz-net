@@ -2,13 +2,12 @@
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 using MongoDB.Bson.Serialization.Serializers;
-using Quartz.Simpl;
 
 namespace Quartz.Spi.MongoDbJobStore.Serializers
 {
     internal class JobDataMapSerializer : SerializerBase<JobDataMap>
     {
-        private readonly DefaultObjectSerializer _objectSerializer = new DefaultObjectSerializer();
+        private readonly IObjectSerializer _objectSerializer = JobStoreObjectSerializer.Instance;
 
         public override void Serialize(BsonSerializationContext context, BsonSerializationArgs args, JobDataMap value)
         {

@@ -136,7 +136,7 @@ namespace Quartz.Spi.MongoDbJobStore.Repositories
 
         public async Task<long> GetCount()
         {
-            return await Collection.Find(trigger => trigger.Id.InstanceName == InstanceName).CountAsync().ConfigureAwait(false);
+            return await Collection.Find(trigger => trigger.Id.InstanceName == InstanceName).CountDocumentsAsync().ConfigureAwait(false);
         }
 
         public async Task<long> GetCount(JobKey jobKey)
@@ -144,7 +144,7 @@ namespace Quartz.Spi.MongoDbJobStore.Repositories
             return
                 await Collection.Find(
                     FilterBuilder.Where(trigger => trigger.Id.InstanceName == InstanceName && trigger.JobKey == jobKey))
-                    .CountAsync().ConfigureAwait(false);
+                    .CountDocumentsAsync().ConfigureAwait(false);
         }
 
         public async Task<long> GetMisfireCount(DateTime nextFireTime)
@@ -155,7 +155,7 @@ namespace Quartz.Spi.MongoDbJobStore.Repositories
                         trigger.Id.InstanceName == InstanceName &&
                         trigger.MisfireInstruction != MisfireInstruction.IgnoreMisfirePolicy &&
                         trigger.NextFireTime < nextFireTime && trigger.State == Models.TriggerState.Waiting)
-                    .CountAsync().ConfigureAwait(false);
+                    .CountDocumentsAsync().ConfigureAwait(false);
         }
 
         public async Task AddTrigger(Trigger trigger)

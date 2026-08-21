@@ -67,12 +67,12 @@ namespace Quartz.Spi.MongoDbJobStore.Models
                 MisfireInstruction = MisfireInstruction.IgnoreMisfirePolicy,
                 JobDataMap = jobDataMap
             };
-            recoveryTrigger.JobDataMap.Put(SchedulerConstants.FailedJobOriginalTriggerName, TriggerKey.Name);
-            recoveryTrigger.JobDataMap.Put(SchedulerConstants.FailedJobOriginalTriggerGroup, TriggerKey.Group);
-            recoveryTrigger.JobDataMap.Put(SchedulerConstants.FailedJobOriginalTriggerFiretime,
-                Convert.ToString(firedTime, CultureInfo.InvariantCulture));
-            recoveryTrigger.JobDataMap.Put(SchedulerConstants.FailedJobOriginalTriggerScheduledFiretime,
-                Convert.ToString(scheduledTime, CultureInfo.InvariantCulture));
+            recoveryTrigger.JobDataMap[SchedulerConstants.FailedJobOriginalTriggerName] = TriggerKey.Name;
+            recoveryTrigger.JobDataMap[SchedulerConstants.FailedJobOriginalTriggerGroup] = TriggerKey.Group;
+            recoveryTrigger.JobDataMap[SchedulerConstants.FailedJobOriginalTriggerFiretime] =
+                Convert.ToString(firedTime, CultureInfo.InvariantCulture);
+            recoveryTrigger.JobDataMap[SchedulerConstants.FailedJobOriginalTriggerScheduledFiretime] =
+                Convert.ToString(scheduledTime, CultureInfo.InvariantCulture);
             return recoveryTrigger;
         }
     }

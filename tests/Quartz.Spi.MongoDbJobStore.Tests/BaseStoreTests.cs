@@ -11,16 +11,27 @@ namespace Quartz.Spi.MongoDbJobStore.Tests
         public const string DateStamps = "DATE_STAMPS";
         public static readonly TimeSpan TestTimeout = TimeSpan.FromSeconds(125);
 
+        /// <summary>
+        /// Where the tests expect to find MongoDB. CI points this at its own container;
+        /// locally it falls back to a plain local server.
+        /// </summary>
+        protected static string ConnectionString =>
+            Environment.GetEnvironmentVariable("QUARTZ_MONGO_CONNECTION_STRING") ??
+            "mongodb://localhost/quartz";
+
         protected async Task<IScheduler> CreateScheduler(string instanceName = "QUARTZ_TEST")
         {
             var properties = new NameValueCollection
             {
-                ["quartz.serializer.type"] = "binary",
+                // Spelled out rather than using the "json" alias, which resolves to the
+                // Newtonsoft-based Quartz.Serialization.Json package instead of this one.
+                ["quartz.serializer.type"] =
+                    "Quartz.Simpl.SystemTextJsonObjectSerializer, Quartz.Serialization.SystemTextJson",
                 [StdSchedulerFactory.PropertySchedulerInstanceName] = instanceName,
                 [StdSchedulerFactory.PropertySchedulerInstanceId] = $"{Environment.MachineName}-{Guid.NewGuid()}",
                 [StdSchedulerFactory.PropertyJobStoreType] = typeof(MongoDbJobStore).AssemblyQualifiedName,
                 [$"{StdSchedulerFactory.PropertyJobStorePrefix}.{StdSchedulerFactory.PropertyDataSourceConnectionString}"]
-                    = "mongodb://localhost/quartz",
+                    = ConnectionString,
                 [$"{StdSchedulerFactory.PropertyJobStorePrefix}.collectionPrefix"] = "prefix"
             };
 
