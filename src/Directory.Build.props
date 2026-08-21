@@ -18,17 +18,24 @@
     <DebugSymbols>true</DebugSymbols>
   </PropertyGroup>
 
+  <!-- Releases are cut by pushing a v* tag; the publish workflow passes -p:Version
+       from the tag. This prefix is only the fallback for local and CI packs. -->
+  <PropertyGroup>
+    <VersionPrefix>1.0.1</VersionPrefix>
+  </PropertyGroup>
+
   <PropertyGroup>
     <Product>Quartz.Spi.MongoDbJobStore</Product>
     <Authors>Gabriel Lucaci</Authors>
     <Company>Gabriel Lucaci</Company>
     <Copyright>Copyright © 2021 Gabriel Lucaci</Copyright>
-    <PackageLicenseUrl>https://github.com/cotique/mongodb-quartz-net/blob/master/LICENSE</PackageLicenseUrl>
+    <Description>MongoDB job store for Quartz.NET. Fork of glucaci/mongodb-quartz-net, published as cotique.Quartz.Spi.MongoDbJobStore.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/cotique/mongodb-quartz-net</PackageProjectUrl>
-    <PackageReleaseNotes>Release notes: https://github.com/cotique/mongodb-quartz-net/releases/$(Version)</PackageReleaseNotes>
+    <PackageReleaseNotes>Release notes: https://github.com/cotique/mongodb-quartz-net/releases</PackageReleaseNotes>
     <RepositoryUrl>https://github.com/cotique/mongodb-quartz-net.git</RepositoryUrl>
     <PackageTags>Quartz.NET Store JobStore MongoDB</PackageTags>
-    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <RepositoryType>GitHub</RepositoryType>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <IncludeSymbols>true</IncludeSymbols>
@@ -40,9 +47,5 @@
   <PropertyGroup>
     <DefaultItemExcludes>$(DefaultItemExcludes);obj\**</DefaultItemExcludes>
   </PropertyGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.0.0" PrivateAssets="All"/>
-  </ItemGroup>
 
 </Project>
