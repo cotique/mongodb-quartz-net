@@ -2,6 +2,11 @@ name: publish
 
 # Publishing is driven by tags: pushing v1.2.3 publishes 1.2.3 to nuget.org.
 # workflow_dispatch is the manual escape hatch and takes the version explicitly.
+#
+# Authentication is trusted publishing, not a stored API key: nuget.org validates
+# this workflow's OIDC token against a policy naming this repository and this file,
+# then issues a key that lives for an hour. Renaming this file, or moving the job
+# into a GitHub environment, breaks the policy match until the policy is updated.
 on:
   push:
     tags: [ 'v*' ]
@@ -21,6 +26,13 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+
+    # nuget.org hands out a short-lived publishing key in exchange for this job's
+    # OIDC token, so id-token: write is what makes trusted publishing work at all.
+    # Without it the token request fails quietly and the login step gets nothing.
+    permissions:
+      contents: read
+      id-token: write
 
     services:
       mongo:
@@ -78,14 +90,25 @@ jobs:
           -p:Version=${{ steps.version.outputs.version }}
           -o artifacts
 
+      # Requested here rather than at the top of the job: the key nuget.org returns
+      # lasts an hour and one OIDC token buys exactly one key, so it is fetched
+      # immediately before the push that uses it.
+      #
+      # Pinned to the v1.2.0 commit rather than the v1 tag. This is the one step that
+      # mints a credential able to publish under our account, and a moving tag is a
+      # way to lose control of it. Dependabot watches the actions and will offer bumps.
+      - name: Log in to nuget.org
+        id: login
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
       # A .snupkg symbol package sitting next to the .nupkg is pushed along with it.
       - name: Push to nuget.org
-        env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
         run: >
           dotnet nuget push "artifacts/*.nupkg"
           --source https://api.nuget.org/v3/index.json
-          --api-key "$NUGET_API_KEY"
+          --api-key "${{ steps.login.outputs.NUGET_API_KEY }}"
           --skip-duplicate
 
       - name: Upload package
