@@ -15,9 +15,16 @@ This fork stays on the v3 code and moves the dependencies forward.
 
 | | upstream stable (3.1.0) | this fork |
 | --- | --- | --- |
-| MongoDB.Driver | 2.4.2 | 2.22.0 |
-| Quartz | 3.0.4 | 3.3.3 |
-| Target framework | net452; net462; netstandard2.0 | netstandard2.0 |
+| MongoDB.Driver | 2.4.2 | 3.11.0 |
+| Quartz | 3.0.4 | 3.19.1 |
+| Target framework | net452; net462; netstandard2.0 | net8.0 |
+
+MongoDB.Driver 3.x ships no `netstandard2.0` assembly, so the move to it means .NET
+Framework and .NET Standard consumers stay on the 1.x line of this package.
+
+Logging goes through `Microsoft.Extensions.Logging`. Quartz builds the job store itself, so
+there is nowhere to inject a factory; assign `JobStoreLogging.LoggerFactory` before starting
+the scheduler, or the store stays quiet.
 
 ## Basic usage
 
