@@ -264,3 +264,8 @@ paket-files/
 __pycache__/
 *.pyc
 *.DotSettings
+
+# Claude Code: the project skills under .claude/skills are shared on purpose;
+# only machine-local state is ignored.
+.claude/settings.local.json
+.claude/discipline-events.jsonl
