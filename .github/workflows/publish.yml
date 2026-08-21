@@ -1,0 +1,82 @@
+name: publish
+
+# Publishing is driven by tags: pushing v1.2.3 publishes 1.2.3 to nuget.org.
+# workflow_dispatch is the manual escape hatch and takes the version explicitly.
+on:
+  push:
+    tags: [ 'v*' ]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish, without the leading v (e.g. 1.2.3)'
+        required: true
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+
+      # The version arrives through the environment rather than being interpolated
+      # into the script, so a crafted tag or input cannot inject shell.
+      - name: Resolve version
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          version="${INPUT_VERSION:-${REF_NAME#v}}"
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::'$version' is not a valid package version"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Publishing $version"
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build -c Release --no-restore -p:Version=${{ steps.version.outputs.version }}
+
+      - name: Test
+        run: dotnet test -c Release --no-build --verbosity normal
+
+      - name: Pack
+        run: >
+          dotnet pack src/Quartz.Spi.MongoDbJobStore/Quartz.Spi.MongoDbJobStore.csproj
+          -c Release --no-build
+          -p:Version=${{ steps.version.outputs.version }}
+          -o artifacts
+
+      # A .snupkg symbol package sitting next to the .nupkg is pushed along with it.
+      - name: Push to nuget.org
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: >
+          dotnet nuget push "artifacts/*.nupkg"
+          --source https://api.nuget.org/v3/index.json
+          --api-key "$NUGET_API_KEY"
+          --skip-duplicate
+
+      - name: Upload package
+        uses: actions/upload-artifact@v7
+        with:
+          name: nupkg
+          path: artifacts/*
+          if-no-files-found: error
