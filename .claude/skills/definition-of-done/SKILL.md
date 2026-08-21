@@ -51,7 +51,7 @@ release it.
 - **Do not push a tag.** `v*` triggers publication to nuget.org, and a published version
   cannot be deleted, only unlisted.
 - **Do not create a GitHub release**, and do not publish to nuget.org by any other route.
-- **Do not commit on `master` or `develop`.** Branch, then open a PR.
+- **Do not commit on `master`.** Branch, then open a PR.
 
 Every one of these was done unasked in this repository once already. If a plan mentions a
 later step, that is a plan, not permission for the step.
