@@ -28,7 +28,7 @@ namespace Quartz.Spi.MongoDbJobStore.Repositories
                 {
                     Id = lockId,
                     InstanceId = instanceId,
-                    AquiredAt = DateTime.Now
+                    AquiredAt = DateTime.UtcNow
                 }).ConfigureAwait(false);
                 Log.LogTrace($"Acquired lock {lockId} on {instanceId}");
                 return true;
