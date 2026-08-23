@@ -14,7 +14,12 @@ namespace Quartz.Spi.MongoDbJobStore
     /// Implements a simple distributed lock on top of MongoDB. It is not a reentrant lock so you can't
     /// acquire the lock more than once in the same thread of execution.
     /// </summary>
-    internal class LockManager : IDisposable
+    /// <remarks>
+    /// Release is asynchronous, and the lock is handed out as an <see cref="IAsyncDisposable" /> for
+    /// that reason: giving it back is a round-trip to the database. Blocking on that round-trip held
+    /// a thread-pool thread at the close of every store operation.
+    /// </remarks>
+    internal class LockManager : IAsyncDisposable
     {
         private static readonly TimeSpan SleepThreshold = TimeSpan.FromMilliseconds(1000);
 
@@ -34,7 +39,7 @@ namespace Quartz.Spi.MongoDbJobStore
             _lockRepository = new LockRepository(database, instanceName, collectionPrefix);
         }
 
-        public void Dispose()
+        public async ValueTask DisposeAsync()
         {
             EnsureObjectNotDisposed();
 
@@ -42,17 +47,17 @@ namespace Quartz.Spi.MongoDbJobStore
             var locks = _pendingLocks.ToArray();
             foreach (var keyValuePair in locks)
             {
-                keyValuePair.Value.Dispose();
+                await keyValuePair.Value.DisposeAsync().ConfigureAwait(false);
             }
         }
 
-        public async Task<IDisposable> AcquireLock(LockType lockType, string instanceId)
+        public async Task<IAsyncDisposable> AcquireLock(LockType lockType, string instanceId)
         {
             while (true)
             {
                 EnsureObjectNotDisposed();
 
-                await _pendingLocksSemaphore.WaitAsync();
+                await _pendingLocksSemaphore.WaitAsync().ConfigureAwait(false);
                 try
                 {
                     if (await _lockRepository.TryAcquireLock(lockType, instanceId).ConfigureAwait(false))
@@ -68,18 +73,18 @@ namespace Quartz.Spi.MongoDbJobStore
                     _pendingLocksSemaphore.Release();
                 }
 
-                await Task.Delay(SleepThreshold);
+                await Task.Delay(SleepThreshold).ConfigureAwait(false);
             }
         }
-        
+
         private async Task ReleaseLock(LockInstance lockInstance)
         {
-            await _pendingLocksSemaphore.WaitAsync();
+            await _pendingLocksSemaphore.WaitAsync().ConfigureAwait(false);
             try
             {
+                await _lockRepository.ReleaseLock(lockInstance.LockType, lockInstance.InstanceId)
+                    .ConfigureAwait(false);
 
-                _lockRepository.ReleaseLock(lockInstance.LockType, lockInstance.InstanceId).ConfigureAwait(false).GetAwaiter().GetResult();
-                
                 LockReleased(lockInstance);
             }
             finally
@@ -112,7 +117,7 @@ namespace Quartz.Spi.MongoDbJobStore
             }
         }
 
-        private class LockInstance : IDisposable
+        private class LockInstance : IAsyncDisposable
         {
             private readonly LockManager _lockManager;
 
@@ -129,7 +134,7 @@ namespace Quartz.Spi.MongoDbJobStore
 
             public LockType LockType { get; }
 
-            public void Dispose()
+            public async ValueTask DisposeAsync()
             {
                 if (_disposed)
                 {
@@ -137,7 +142,7 @@ namespace Quartz.Spi.MongoDbJobStore
                         $"This lock {LockType} for {InstanceId} has already been disposed");
                 }
 
-                _lockManager.ReleaseLock(this).GetAwaiter().GetResult();
+                await _lockManager.ReleaseLock(this).ConfigureAwait(false);
 
                 _disposed = true;
             }

@@ -378,6 +378,44 @@ namespace Quartz.Spi.MongoDbJobStore.Tests
         }
 
         [Fact]
+        public async Task DeleteJobsRemovesEveryKeyWhenAnEarlierOneIsMissing()
+        {
+            await _scheduler.AddJob(JobBuilder.Create<SimpleJob>().WithIdentity("j1").StoreDurably().Build(), false);
+            await _scheduler.AddJob(JobBuilder.Create<SimpleJob>().WithIdentity("j2").StoreDurably().Build(), false);
+
+            // The missing key goes first deliberately. The store folded the removals with &&,
+            // so the first key it did not find stopped the fold and the rest were never touched.
+            var keys = new[] { new JobKey("missing"), new JobKey("j1"), new JobKey("j2") };
+
+            (await _scheduler.DeleteJobs(keys)).Should().BeFalse("one of the keys did not exist");
+
+            (await _scheduler.CheckExists(new JobKey("j1"))).Should().BeFalse("j1 was asked to be deleted");
+            (await _scheduler.CheckExists(new JobKey("j2"))).Should().BeFalse("j2 was asked to be deleted");
+        }
+
+        [Fact]
+        public async Task UnscheduleJobsRemovesEveryKeyWhenAnEarlierOneIsMissing()
+        {
+            foreach (var name in new[] { "t1", "t2" })
+            {
+                var job = JobBuilder.Create<SimpleJob>().WithIdentity($"j-{name}").Build();
+                var trigger = TriggerBuilder.Create()
+                    .WithIdentity(name)
+                    .ForJob(job)
+                    .StartAt(DateTimeOffset.UtcNow.AddHours(1))
+                    .Build();
+                await _scheduler.ScheduleJob(job, trigger);
+            }
+
+            var keys = new[] { new TriggerKey("missing"), new TriggerKey("t1"), new TriggerKey("t2") };
+
+            (await _scheduler.UnscheduleJobs(keys)).Should().BeFalse("one of the keys did not exist");
+
+            (await _scheduler.CheckExists(new TriggerKey("t1"))).Should().BeFalse("t1 was asked to be unscheduled");
+            (await _scheduler.CheckExists(new TriggerKey("t2"))).Should().BeFalse("t2 was asked to be unscheduled");
+        }
+
+        [Fact]
         public async Task TestShutdownWithoutWaitIsUnclean()
         {
             var jobExecTimestamps = new List<DateTime>();
