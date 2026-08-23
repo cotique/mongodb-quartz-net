@@ -251,7 +251,7 @@ namespace Quartz.Spi.MongoDbJobStore
         {
             try
             {
-                using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
+                await using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
                 {
                     await StoreJobInternal(newJob, false).ConfigureAwait(false);
                     await StoreTriggerInternal(newTrigger, newJob, false, Models.TriggerState.Waiting, false, false,
@@ -285,7 +285,7 @@ namespace Quartz.Spi.MongoDbJobStore
         {
             try
             {
-                using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
+                await using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
                 {
                     await StoreJobInternal(newJob, replaceExisting).ConfigureAwait(false);
                 }
@@ -302,7 +302,7 @@ namespace Quartz.Spi.MongoDbJobStore
         {
             try
             {
-                using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
+                await using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
                 {
                     foreach (var job in triggersAndJobs.Keys)
                     {
@@ -327,7 +327,7 @@ namespace Quartz.Spi.MongoDbJobStore
         {
             try
             {
-                using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
+                await using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
                 {
                     return await RemoveJobInternal(jobKey).ConfigureAwait(false);
                 }
@@ -343,9 +343,19 @@ namespace Quartz.Spi.MongoDbJobStore
         {
             try
             {
-                using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
+                await using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
                 {
-                    return jobKeys.Aggregate(true, (current, jobKey) => current && RemoveJobInternal(jobKey).Result);
+                    // Every key is removed, and the answer says whether they were all found.
+                    // Folding this with && short-circuits: the first key that is not there
+                    // stops the fold and leaves the rest of the collection in the database.
+                    var allFound = true;
+                    foreach (var jobKey in jobKeys)
+                    {
+                        var found = await RemoveJobInternal(jobKey).ConfigureAwait(false);
+                        allFound = allFound && found;
+                    }
+
+                    return allFound;
                 }
             }
             catch (Exception ex)
@@ -363,7 +373,7 @@ namespace Quartz.Spi.MongoDbJobStore
         public async Task StoreTrigger(IOperableTrigger newTrigger, bool replaceExisting,
             CancellationToken cancellationToken = default(CancellationToken))
         {
-            using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
+            await using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
             {
                 await StoreTriggerInternal(newTrigger, null, replaceExisting, Models.TriggerState.Waiting, false, false,
                     cancellationToken);
@@ -375,7 +385,7 @@ namespace Quartz.Spi.MongoDbJobStore
         {
             try
             {
-                using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
+                await using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
                 {
                     return await RemoveTriggerInternal(triggerKey).ConfigureAwait(false);
                 }
@@ -391,10 +401,18 @@ namespace Quartz.Spi.MongoDbJobStore
         {
             try
             {
-                using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
+                await using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
                 {
-                    return triggerKeys.Aggregate(true,
-                        (current, triggerKey) => current && RemoveTriggerInternal(triggerKey).Result);
+                    // Same as RemoveJobs: the fold this replaces stopped at the first key it
+                    // did not find.
+                    var allFound = true;
+                    foreach (var triggerKey in triggerKeys)
+                    {
+                        var found = await RemoveTriggerInternal(triggerKey).ConfigureAwait(false);
+                        allFound = allFound && found;
+                    }
+
+                    return allFound;
                 }
             }
             catch (Exception ex)
@@ -408,7 +426,7 @@ namespace Quartz.Spi.MongoDbJobStore
         {
             try
             {
-                using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
+                await using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
                 {
                     return await ReplaceTriggerInternal(triggerKey, newTrigger).ConfigureAwait(false);
                 }
@@ -445,7 +463,7 @@ namespace Quartz.Spi.MongoDbJobStore
         {
             try
             {
-                using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
+                await using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
                 {
                     await _calendarRepository.DeleteAll().ConfigureAwait(false);
                     await _firedTriggerRepository.DeleteAll().ConfigureAwait(false);
@@ -466,7 +484,7 @@ namespace Quartz.Spi.MongoDbJobStore
         {
             try
             {
-                using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
+                await using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
                 {
                     await StoreCalendarInternal(name, calendar, replaceExisting, updateTriggers, token).ConfigureAwait(false);
                 }
@@ -481,7 +499,7 @@ namespace Quartz.Spi.MongoDbJobStore
         {
             try
             {
-                using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
+                await using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
                 {
                     return await RemoveCalendarInternal(calName).ConfigureAwait(false);
                 }
@@ -587,7 +605,7 @@ namespace Quartz.Spi.MongoDbJobStore
         {
             try
             {
-                using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
+                await using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
                 {
                     await PauseTriggerInternal(triggerKey).ConfigureAwait(false);
                 }
@@ -603,7 +621,7 @@ namespace Quartz.Spi.MongoDbJobStore
         {
             try
             {
-                using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
+                await using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
                 {
                     return await PauseTriggerGroupInternal(matcher, token).ConfigureAwait(false);
                 }
@@ -618,7 +636,7 @@ namespace Quartz.Spi.MongoDbJobStore
         {
             try
             {
-                using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
+                await using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
                 {
                     var triggers = await GetTriggersForJob(jobKey, token).ConfigureAwait(false);
                     foreach (var operableTrigger in triggers)
@@ -636,7 +654,7 @@ namespace Quartz.Spi.MongoDbJobStore
         {
             try
             {
-                using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
+                await using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
                 {
                     var jobKeys = await _jobDetailRepository.GetJobsKeys(matcher).ConfigureAwait(false);
                     foreach (var jobKey in jobKeys)
@@ -659,7 +677,7 @@ namespace Quartz.Spi.MongoDbJobStore
         {
             try
             {
-                using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
+                await using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
                 {
                     await ResumeTriggerInternal(triggerKey, token).ConfigureAwait(false);
                 }
@@ -675,7 +693,7 @@ namespace Quartz.Spi.MongoDbJobStore
         {
             try
             {
-                using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
+                await using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
                 {
                     await ResetTriggerFromErrorStateInternal(triggerKey, token).ConfigureAwait(false);
                 }
@@ -691,7 +709,7 @@ namespace Quartz.Spi.MongoDbJobStore
         {
             try
             {
-                using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
+                await using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
                 {
                     return await ResumeTriggersInternal(matcher, token).ConfigureAwait(false);
                 }
@@ -713,7 +731,7 @@ namespace Quartz.Spi.MongoDbJobStore
         {
             try
             {
-                using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
+                await using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
                 {
                     var triggers = await _triggerRepository.GetTriggers(jobKey).ConfigureAwait(false);
                     await Task.WhenAll(triggers.Select(trigger =>
@@ -735,7 +753,7 @@ namespace Quartz.Spi.MongoDbJobStore
         {
             try
             {
-                using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
+                await using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
                 {
                     var jobKeys = await _jobDetailRepository.GetJobsKeys(matcher).ConfigureAwait(false);
                     foreach (var jobKey in jobKeys)
@@ -762,7 +780,7 @@ namespace Quartz.Spi.MongoDbJobStore
         {
             try
             {
-                using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
+                await using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
                 {
                     await PauseAllInternal().ConfigureAwait(false);
                 }
@@ -777,7 +795,7 @@ namespace Quartz.Spi.MongoDbJobStore
         {
             try
             {
-                using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
+                await using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
                 {
                     await ResumeAllInternal().ConfigureAwait(false);
                 }
@@ -793,7 +811,7 @@ namespace Quartz.Spi.MongoDbJobStore
         {
             try
             {
-                using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
+                await using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
                 {
                     return await AcquireNextTriggersInternal(noLaterThan, maxCount, timeWindow).ConfigureAwait(false);
                 }
@@ -809,7 +827,7 @@ namespace Quartz.Spi.MongoDbJobStore
         {
             try
             {
-                using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
+                await using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
                 {
                     await _triggerRepository.UpdateTriggerState(trigger.Key, Models.TriggerState.Waiting,
                         Models.TriggerState.Acquired).ConfigureAwait(false);
@@ -827,7 +845,7 @@ namespace Quartz.Spi.MongoDbJobStore
         {
             try
             {
-                using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
+                await using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
                 {
                     var results = new List<TriggerFiredResult>();
 
@@ -862,7 +880,7 @@ namespace Quartz.Spi.MongoDbJobStore
         {
             try
             {
-                using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
+                await using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
                 {
                     await TriggeredJobCompleteInternal(trigger, jobDetail, triggerInstCode, token).ConfigureAwait(false)
                         ;
@@ -894,7 +912,7 @@ namespace Quartz.Spi.MongoDbJobStore
                 }
                 else
                 {
-                    using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
+                    await using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
                     {
                         result = await RecoverMisfiredJobsInternal(false).ConfigureAwait(false);
                     }
@@ -910,7 +928,7 @@ namespace Quartz.Spi.MongoDbJobStore
 
         private async Task RecoverJobs()
         {
-            using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
+            await using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
             {
                 await RecoverJobsInternal().ConfigureAwait(false);
             }
@@ -930,7 +948,7 @@ namespace Quartz.Spi.MongoDbJobStore
                 // cluster-wide serialisation point on a loop that almost always finds nothing.
                 if ((await FindFailedInstances().ConfigureAwait(false)).Count > 0)
                 {
-                    using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
+                    await using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
                     {
                         // Asked again under the lock. Two live instances notice the same death at the
                         // same moment and queue behind each other here; the second must find the work
