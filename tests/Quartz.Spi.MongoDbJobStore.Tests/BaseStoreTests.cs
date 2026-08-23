@@ -19,7 +19,8 @@ namespace Quartz.Spi.MongoDbJobStore.Tests
             Environment.GetEnvironmentVariable("QUARTZ_MONGO_CONNECTION_STRING") ??
             "mongodb://localhost/quartz";
 
-        protected async Task<IScheduler> CreateScheduler(string instanceName = "QUARTZ_TEST")
+        protected async Task<IScheduler> CreateScheduler(string instanceName = "QUARTZ_TEST",
+            string instanceId = null, NameValueCollection extraProperties = null)
         {
             var properties = new NameValueCollection
             {
@@ -28,12 +29,18 @@ namespace Quartz.Spi.MongoDbJobStore.Tests
                 ["quartz.serializer.type"] =
                     "Quartz.Simpl.SystemTextJsonObjectSerializer, Quartz.Serialization.SystemTextJson",
                 [StdSchedulerFactory.PropertySchedulerInstanceName] = instanceName,
-                [StdSchedulerFactory.PropertySchedulerInstanceId] = $"{Environment.MachineName}-{Guid.NewGuid()}",
+                [StdSchedulerFactory.PropertySchedulerInstanceId] =
+                    instanceId ?? $"{Environment.MachineName}-{Guid.NewGuid()}",
                 [StdSchedulerFactory.PropertyJobStoreType] = typeof(MongoDbJobStore).AssemblyQualifiedName,
                 [$"{StdSchedulerFactory.PropertyJobStorePrefix}.{StdSchedulerFactory.PropertyDataSourceConnectionString}"]
                     = ConnectionString,
                 [$"{StdSchedulerFactory.PropertyJobStorePrefix}.collectionPrefix"] = "prefix"
             };
+
+            if (extraProperties != null)
+            {
+                properties.Add(extraProperties);
+            }
 
             var scheduler = new StdSchedulerFactory(properties);
             return await scheduler.GetScheduler();

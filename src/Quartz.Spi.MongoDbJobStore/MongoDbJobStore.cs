@@ -22,6 +22,12 @@ namespace Quartz.Spi.MongoDbJobStore
         private const string KeySignalChangeForTxCompletion = "sigChangeForTxCompletion";
         private const string AllGroupsPaused = "_$_ALL_GROUPS_PAUSED_$_";
 
+        /// <summary>
+        ///     Added on top of the check-in window before an instance is declared failed. Mirrors the
+        ///     same allowance in Quartz's ADO store.
+        /// </summary>
+        private static readonly TimeSpan CheckinGracePeriod = TimeSpan.FromMilliseconds(7500);
+
         private static readonly DateTimeOffset? SchedulingSignalDateTime = new DateTimeOffset(1982, 6, 28, 0, 0, 0,
             TimeSpan.FromSeconds(0));
 
@@ -32,8 +38,11 @@ namespace Quartz.Spi.MongoDbJobStore
         private IMongoDatabase _database;
         private FiredTriggerRepository _firedTriggerRepository;
         private JobDetailRepository _jobDetailRepository;
+        private ClusterManager _clusterManager;
+        private DateTime _lastCheckIn;
         private LockManager _lockManager;
         private MisfireHandler _misfireHandler;
+        private TimeSpan _clusterCheckinInterval = TimeSpan.FromSeconds(15);
         private TimeSpan _misfireThreshold = TimeSpan.FromMinutes(1);
         private PausedTriggerGroupRepository _pausedTriggerGroupRepository;
         private SchedulerId _schedulerId;
@@ -97,6 +106,33 @@ namespace Quartz.Spi.MongoDbJobStore
         /// </summary>
         public int RetryableActionErrorLogThreshold { get; set; }
 
+        /// <summary>
+        ///     How often this instance reports itself alive, and the basis for deciding that another
+        ///     instance is not. The default is 15 seconds, as in Quartz's own ADO store.
+        /// </summary>
+        /// <remarks>
+        ///     An instance is declared dead once its last check-in is older than this interval plus
+        ///     <see cref="CheckinGracePeriod" />, and, when this instance's own loop has been starved,
+        ///     older than however long that starvation lasted. The threshold is deliberately not the
+        ///     interval itself: a garbage collection pause or a slow database round trip must not be
+        ///     enough to have a working instance declared dead and its running work handed to someone
+        ///     else.
+        /// </remarks>
+        [TimeSpanParseRule(TimeSpanParseRule.Milliseconds)]
+        public TimeSpan ClusterCheckinInterval
+        {
+            get => _clusterCheckinInterval;
+            set
+            {
+                if (value.TotalMilliseconds < 1)
+                {
+                    throw new ArgumentException("ClusterCheckinInterval must be larger than 0");
+                }
+
+                _clusterCheckinInterval = value;
+            }
+        }
+
         protected DateTimeOffset MisfireTime
         {
             get
@@ -142,11 +178,12 @@ namespace Quartz.Spi.MongoDbJobStore
         public async Task SchedulerStarted(CancellationToken token = default(CancellationToken))
         {
             Log.LogTrace($"Scheduler {_schedulerId} started");
+            _lastCheckIn = DateTime.UtcNow;
             await _schedulerRepository.AddScheduler(new Scheduler
             {
                 Id = _schedulerId,
                 State = SchedulerState.Started,
-                LastCheckIn = DateTime.Now
+                LastCheckIn = _lastCheckIn
             }).ConfigureAwait(false);
 
             try
@@ -160,6 +197,8 @@ namespace Quartz.Spi.MongoDbJobStore
 
             _misfireHandler = new MisfireHandler(this);
             _misfireHandler.Start();
+            _clusterManager = new ClusterManager(this);
+            _clusterManager.Start();
             _schedulerRunning = true;
         }
 
@@ -186,6 +225,18 @@ namespace Quartz.Spi.MongoDbJobStore
                 try
                 {
                     _misfireHandler.Join();
+                }
+                catch (ThreadInterruptedException)
+                {
+                }
+            }
+
+            if (_clusterManager != null)
+            {
+                _clusterManager.Shutdown();
+                try
+                {
+                    _clusterManager.Join();
                 }
                 catch (ThreadInterruptedException)
                 {
@@ -865,6 +916,164 @@ namespace Quartz.Spi.MongoDbJobStore
             }
         }
 
+        /// <summary>
+        ///     Reports this instance alive and reclaims the work of any instance that stopped
+        ///     reporting. Returns true when something was reclaimed.
+        /// </summary>
+        internal async Task<bool> DoCheckIn()
+        {
+            try
+            {
+                var recovered = false;
+
+                // Read first without the lock. Taking TriggerAccess on every check-in would put a
+                // cluster-wide serialisation point on a loop that almost always finds nothing.
+                if ((await FindFailedInstances().ConfigureAwait(false)).Count > 0)
+                {
+                    using (await _lockManager.AcquireLock(LockType.TriggerAccess, InstanceId).ConfigureAwait(false))
+                    {
+                        // Asked again under the lock. Two live instances notice the same death at the
+                        // same moment and queue behind each other here; the second must find the work
+                        // already done rather than repeat it, and it does, because recovery ends by
+                        // deleting the dead instance's row.
+                        var failedInstances = await FindFailedInstances().ConfigureAwait(false);
+                        foreach (var failedInstance in failedInstances)
+                        {
+                            await ClusterRecover(failedInstance).ConfigureAwait(false);
+                            recovered = true;
+                        }
+                    }
+                }
+
+                var now = DateTime.UtcNow;
+                if (!await _schedulerRepository.UpdateLastCheckIn(_schedulerId.Id, now).ConfigureAwait(false))
+                {
+                    // Our own row is gone, so another instance decided this one was dead and has
+                    // already reclaimed whatever it was running. Worth saying out loud: it means this
+                    // loop was starved for longer than the failure threshold, and anything that was
+                    // executing here may now be executing somewhere else as well.
+                    Log.LogWarning(
+                        $"Scheduler {_schedulerId} was declared failed by another instance and its work reclaimed. Re-registering.");
+                    await _schedulerRepository.AddScheduler(new Scheduler
+                    {
+                        Id = _schedulerId,
+                        State = _schedulerRunning ? SchedulerState.Started : SchedulerState.Paused,
+                        LastCheckIn = now
+                    }).ConfigureAwait(false);
+                }
+
+                _lastCheckIn = now;
+
+                return recovered;
+            }
+            catch (Exception ex)
+            {
+                throw new JobPersistenceException(ex.Message, ex);
+            }
+        }
+
+        private async Task<List<Scheduler>> FindFailedInstances()
+        {
+            var now = DateTime.UtcNow;
+            return (await _schedulerRepository.GetAll().ConfigureAwait(false))
+                .Where(scheduler => scheduler.Id.Id != InstanceId && CalcFailedIfAfter(scheduler) < now)
+                .ToList();
+        }
+
+        /// <summary>
+        ///     The moment after which an instance counts as failed.
+        /// </summary>
+        /// <remarks>
+        ///     The window is the check-in interval, or however long this instance's own loop has been
+        ///     stalled if that is longer, plus a fixed grace period. The second term is the one that
+        ///     matters under load: if a garbage collection pause or a slow database froze this loop,
+        ///     every other instance's record looks equally stale through no fault of its own, and
+        ///     declaring them all dead on that basis would hand their running work out to be run twice.
+        /// </remarks>
+        private DateTime CalcFailedIfAfter(Scheduler scheduler)
+        {
+            var sinceOwnCheckIn = DateTime.UtcNow - _lastCheckIn;
+            var window = ClusterCheckinInterval > sinceOwnCheckIn ? ClusterCheckinInterval : sinceOwnCheckIn;
+
+            // A row with no stamp at all was written by a version of this store that did not check
+            // in. Treated as failed, so whatever it left behind can be cleared.
+            return (scheduler.LastCheckIn ?? DateTime.MinValue).Add(window).Add(CheckinGracePeriod);
+        }
+
+        /// <summary>
+        ///     Reclaims one dead instance's executions. Callers hold <see cref="LockType.TriggerAccess" />.
+        /// </summary>
+        /// <remarks>
+        ///     The ADO store does this inside one transaction. There is none here, so the order is what
+        ///     makes an interrupted pass safe to repeat: the trigger is unblocked or rescheduled before
+        ///     its fired record is deleted, and the dead instance's own row is deleted last. Stopping
+        ///     anywhere in between leaves the record and the row still present, so the next pass sees
+        ///     the same work and finishes it. Deleting either one first would strand the rest with
+        ///     nothing left pointing at it.
+        /// </remarks>
+        private async Task ClusterRecover(Scheduler failedInstance)
+        {
+            var instanceId = failedInstance.Id.Id;
+            var firedTriggers = await _firedTriggerRepository.GetFiredTriggers(instanceId).ConfigureAwait(false);
+
+            Log.LogInformation(
+                $"Scheduler {InstanceName}/{instanceId} last checked in at {failedInstance.LastCheckIn:u} and is considered failed. Reclaiming {firedTriggers.Count} execution(s).");
+
+            var releasedCount = 0;
+            var recoveredCount = 0;
+            var abandonedCount = 0;
+
+            foreach (var firedTrigger in firedTriggers)
+            {
+                if (firedTrigger.JobKey != null && firedTrigger.ConcurrentExecutionDisallowed)
+                {
+                    // The block was held against an execution that no longer exists. This is the line
+                    // that restarts a stopped schedule.
+                    await _triggerRepository.UpdateTriggersStates(firedTrigger.JobKey, Models.TriggerState.Waiting,
+                        Models.TriggerState.Blocked).ConfigureAwait(false);
+                    await _triggerRepository.UpdateTriggersStates(firedTrigger.JobKey, Models.TriggerState.Paused,
+                        Models.TriggerState.PausedBlocked).ConfigureAwait(false);
+                }
+
+                if (firedTrigger.State == Models.TriggerState.Acquired)
+                {
+                    // Taken but never started, so there is nothing to recover: put it back and let
+                    // whoever is next have it.
+                    await _triggerRepository.UpdateTriggerState(firedTrigger.TriggerKey, Models.TriggerState.Waiting,
+                        Models.TriggerState.Acquired).ConfigureAwait(false);
+                    releasedCount++;
+                }
+                else if (firedTrigger.RequestsRecovery && firedTrigger.JobKey != null &&
+                         await _jobDetailRepository.JobExists(firedTrigger.JobKey).ConfigureAwait(false))
+                {
+                    var jobDataMap = await _triggerRepository.GetTriggerJobDataMap(firedTrigger.TriggerKey)
+                        .ConfigureAwait(false);
+
+                    // Named after the execution rather than a fresh guid, so repeating an interrupted
+                    // pass replaces the same trigger instead of scheduling the work a second time.
+                    var recoveryTrigger = firedTrigger.GetRecoveryTrigger(jobDataMap,
+                        $"recover_{instanceId}_{firedTrigger.Id.FiredInstanceId}");
+                    recoveryTrigger.ComputeFirstFireTimeUtc(null);
+                    await StoreTriggerInternal(recoveryTrigger, null, true, Models.TriggerState.Waiting, false, true)
+                        .ConfigureAwait(false);
+                    recoveredCount++;
+                }
+                else
+                {
+                    // Died mid-execution and the job did not ask to be recovered. Quartz's contract is
+                    // that the run itself is lost. The record of it still has to go.
+                    abandonedCount++;
+                }
+
+                await _firedTriggerRepository.DeleteFiredTrigger(firedTrigger.Id.FiredInstanceId).ConfigureAwait(false);
+            }
+
+            await _schedulerRepository.DeleteScheduler(instanceId).ConfigureAwait(false);
+
+            Log.LogInformation(
+                $"Reclaimed instance {instanceId}: {releasedCount} released, {recoveredCount} rescheduled for recovery, {abandonedCount} abandoned.");
+        }
+
         private async Task PauseTriggerInternal(TriggerKey triggerKey)
         {
             var trigger = await _triggerRepository.GetTrigger(triggerKey).ConfigureAwait(false);
@@ -1105,6 +1314,14 @@ namespace Quartz.Spi.MongoDbJobStore
 
                 await _jobDetailRepository.UpdateJob(new JobDetail(newJob, InstanceName), true).ConfigureAwait(false);
             }
+            else if (replaceExisting)
+            {
+                // Upsert rather than insert. The caller asked for whatever is there to be replaced,
+                // and between the check above and this line a second instance installing the same
+                // schedule may have inserted it. An insert would then fail on the unique key with a
+                // driver-level write error, which is not what "replace existing" was asked for.
+                await _jobDetailRepository.UpdateJob(new JobDetail(newJob, InstanceName), true).ConfigureAwait(false);
+            }
             else
             {
                 await _jobDetailRepository.AddJob(new JobDetail(newJob, InstanceName)).ConfigureAwait(false);
@@ -1224,13 +1441,24 @@ namespace Quartz.Spi.MongoDbJobStore
                 }
             }
 
-            await _firedTriggerRepository.UpdateFiredTrigger(
+            // The claim check, before anything runs. Between acquiring this trigger and firing it,
+            // this instance may have been declared failed and the acquisition handed to someone
+            // else; the record is then gone and there is nothing to replace. Firing anyway is how
+            // one slot gets executed twice.
+            var stillClaimed = await _firedTriggerRepository.UpdateFiredTrigger(
                 new FiredTrigger(trigger.FireInstanceId,
                     TriggerFactory.CreateTrigger(trigger, Models.TriggerState.Executing, InstanceName), job)
                 {
                     InstanceId = InstanceId,
                     State = Models.TriggerState.Executing
                 }).ConfigureAwait(false);
+
+            if (!stillClaimed)
+            {
+                Log.LogWarning(
+                    $"Not firing {trigger.Key}: this instance's claim on execution {trigger.FireInstanceId} is gone, so another instance has taken it over.");
+                return null;
+            }
 
             var prevFireTime = trigger.GetPreviousFireTimeUtc();
             trigger.Triggered(calendar);
@@ -1275,7 +1503,12 @@ namespace Quartz.Spi.MongoDbJobStore
             bool forceState)
         {
             var trigger = await _triggerRepository.GetTrigger(triggerKey).ConfigureAwait(false);
-            var misfireTime = DateTime.Now;
+
+            // UtcNow, not Now: NextFireTime comes back from Mongo as UTC, and DateTime
+            // comparison ignores Kind. With local time here the two are offset by the
+            // machine's time zone, and east of Greenwich that marks triggers as misfired
+            // hours before they are due.
+            var misfireTime = DateTime.UtcNow;
             if (MisfireThreshold > TimeSpan.Zero)
             {
                 misfireTime = misfireTime.AddMilliseconds(-1 * MisfireThreshold.TotalMilliseconds);
@@ -1414,6 +1647,23 @@ namespace Quartz.Spi.MongoDbJobStore
         private async Task TriggeredJobCompleteInternal(IOperableTrigger trigger, IJobDetail jobDetail,
             SchedulerInstruction triggerInstCode, CancellationToken token = default(CancellationToken))
         {
+            // The claim check again, on the way out. An instance that was frozen rather than killed
+            // (a long garbage collection, a suspended host, a stalled disk) looks exactly like a dead
+            // one from here, so its work may have been reclaimed and rerun while it was away. When it
+            // thaws it arrives at this method still believing it owns the slot.
+            //
+            // The side effect the job itself performed cannot be taken back; making that safe is the
+            // job's own problem, and the way to do it is an idempotency key derived from the slot
+            // rather than generated per attempt. What is avoidable is this method writing the
+            // trigger state that a different, live execution now owns, and that is what the check
+            // stops.
+            if (await _firedTriggerRepository.GetFiredTrigger(trigger.FireInstanceId).ConfigureAwait(false) == null)
+            {
+                Log.LogError(
+                    $"Execution {trigger.FireInstanceId} of {trigger.Key} finished, but its claim had already been reclaimed by another instance, so the trigger state is left alone. This instance stopped answering for longer than the failure threshold and kept running regardless: a freeze, not a death. If the job requests recovery, this slot was also rerun elsewhere and its side effects happened twice.");
+                return;
+            }
+
             try
             {
                 switch (triggerInstCode)

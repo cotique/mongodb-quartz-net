@@ -54,11 +54,17 @@ namespace Quartz.Spi.MongoDbJobStore.Models
 
         public bool RequestsRecovery { get; set; }
 
-        public IOperableTrigger GetRecoveryTrigger(JobDataMap jobDataMap)
+        /// <param name="name">
+        ///     Overrides the generated trigger name. Cluster recovery passes a name derived from
+        ///     this record so that a pass interrupted halfway can be repeated without producing a
+        ///     second recovery trigger for the same execution; there is no transaction to roll the
+        ///     first one back.
+        /// </param>
+        public IOperableTrigger GetRecoveryTrigger(JobDataMap jobDataMap, string name = null)
         {
             var firedTime = new DateTimeOffset(Fired);
             var scheduledTime = Scheduled.HasValue ? new DateTimeOffset(Scheduled.Value) : DateTimeOffset.MinValue;
-            var recoveryTrigger = new SimpleTriggerImpl($"recover_{InstanceId}_{Guid.NewGuid()}",
+            var recoveryTrigger = new SimpleTriggerImpl(name ?? $"recover_{InstanceId}_{Guid.NewGuid()}",
                 SchedulerConstants.DefaultRecoveryGroup, scheduledTime)
             {
                 JobName = JobKey.Name,
