@@ -14,6 +14,14 @@ namespace Quartz.Spi.MongoDbJobStore.Repositories
         {
         }
 
+        public async Task<FiredTrigger> GetFiredTrigger(string firedInstanceId)
+        {
+            return await Collection
+                .Find(trigger => trigger.Id == new FiredTriggerId(firedInstanceId, InstanceName))
+                .FirstOrDefaultAsync()
+                .ConfigureAwait(false);
+        }
+
         public async Task<List<FiredTrigger>> GetFiredTriggers(JobKey jobKey)
         {
             return
@@ -54,9 +62,15 @@ namespace Quartz.Spi.MongoDbJobStore.Repositories
             return result.DeletedCount;
         }
 
-        public async Task UpdateFiredTrigger(FiredTrigger firedTrigger)
+        /// <summary>
+        ///     Returns false when there was no such record to replace, which means this execution is
+        ///     no longer claimed by anybody: the record was removed while it was in flight.
+        /// </summary>
+        public async Task<bool> UpdateFiredTrigger(FiredTrigger firedTrigger)
         {
-            await Collection.ReplaceOneAsync(trigger => trigger.Id == firedTrigger.Id, firedTrigger).ConfigureAwait(false);
+            var result = await Collection.ReplaceOneAsync(trigger => trigger.Id == firedTrigger.Id, firedTrigger)
+                .ConfigureAwait(false);
+            return result.MatchedCount > 0;
         }
     }
 }
